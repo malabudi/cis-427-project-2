@@ -1,7 +1,9 @@
 import argparse
+import json
 import socket
 import sys
 import threading
+import random
 
 
 class Server:
@@ -10,15 +12,19 @@ class Server:
         self.server_port = server_port
         self.tcp_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 
+        # handle multiple clients
+        self.lock = threading.Lock()
+
         # allow reuse of the server address
         self.tcp_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
 
         # vars for hashing functionality
         self.num_hash_req = None
+        self.num_L_bytes = None
 
 
     def initialize(self, conn):
-        # Read in number of hash requests
+        # Read in number of hash requests, smin, smax as one object
         self.num_hash_req = int(conn.recv(1024).decode('utf-8'))
 
         # show initialization response to server terminal
@@ -44,13 +50,18 @@ class Server:
 
                 # begin reading in hash requests
                 for i in range(self.num_hash_req):
+                    # build a new hash string from scratch for each iteration
                     cur_hash_str = "0x"
-                    request = conn.recv(1024).decode('utf-8')
 
-                    if request:
-                        print(f'200 OK\nType: 3\nData: {request}\n')
+                    # request contains the line of text itself and L
+                    request = json.loads(conn.recv(1024).decode('utf-8'))
+                    line = request['line']
+                    num_L_bytes = request['num_L_bytes']
 
-                        for char in request:
+                    if line and len(line) <= 16:
+                        print(f'200 OK\nType: 3\nData: {line}\n')
+
+                        for char in line:
                             cur_hash_str += f'{ord(char):02x}'
 
                         if len(cur_hash_str) < 34:
@@ -58,11 +69,17 @@ class Server:
 
                         conn.send(f'200 OK'
                                   f'\nType: 4'
-                                  f'\nHash {i}: {cur_hash_str}'.encode('utf-8'))
+                                  f'\nHash {i}: {cur_hash_str}'
+                                  f'\nL Bytes Read: {num_L_bytes}'.encode('utf-8'))
+
+                    if len(line) > 16:
+                        conn.send(f'Error: Line {i + 1} has more than 16 chars.'.encode('utf-8'))
+                        raise Exception(f'Error: File line {i + 1} has more than 16 chars.')
+
         except Exception as e:
             print(f'Error: {e}')
         finally:
-            print(f'Client {addr} disconnected from server.\n{"-" * 40}')
+            print(f'Client {addr} disconnected from server.\n')
 
 
     def start_server(self):

@@ -1,7 +1,9 @@
 import argparse
+import json
 import socket
 import sys
 import threading
+import random
 
 
 class Client:
@@ -19,7 +21,10 @@ class Client:
 
     def send_line(self, tcp_socket, line):
         with self.lock:
-            tcp_socket.send(line.encode('utf-8'))
+            tcp_socket.sendall(json.dumps({
+                'line': line,
+                'num_L_bytes': str(random.randint(self.s_min, self.s_max))
+            }).encode('utf-8'))
             response = tcp_socket.recv(1024).decode('utf-8')
             print(response + '\n')
 
@@ -35,7 +40,7 @@ class Client:
         threads = []
 
         try:
-            with open(self.file, "r") as f:
+            with open(f'input/{self.file}', "r") as f:
                 # validate number of requests by comparing num lines with num requests
                 num_lines = len(f.readlines())
 
